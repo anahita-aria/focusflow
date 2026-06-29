@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="FocusFlow"/>
+  <title>FocusFlow</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet"/>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    html,body{height:100%;background:#050814;overflow:hidden}
+    body{font-family:'Inter',sans-serif;color:#f1f5f9;-webkit-font-smoothing:antialiased}
+    #root{height:100%}
+    ::-webkit-scrollbar{width:3px}
+    ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.15);border-radius:99px}
+
+    @keyframes orbFloat{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(40px,-60px) scale(1.08)}66%{transform:translate(-30px,40px) scale(0.94)}}
+    @keyframes orbFloat2{0%,100%{transform:translate(0,0) scale(1)}40%{transform:translate(-50px,30px) scale(1.1)}70%{transform:translate(30px,-40px) scale(0.92)}}
+    @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+    @keyframes scaleIn{from{opacity:0;transform:scale(0.93)}to{opacity:1;transform:scale(1)}}
+    @keyframes checkPop{0%{transform:scale(0) rotate(-20deg)}60%{transform:scale(1.35) rotate(8deg)}100%{transform:scale(1) rotate(0)}}
+    @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(167,139,250,.55)}50%{box-shadow:0 0 0 9px rgba(167,139,250,0)}}
+    @keyframes ringPulse{0%,100%{opacity:1}50%{opacity:.5}}
+    @keyframes streakBounce{0%{transform:scale(1)}40%{transform:scale(1.45)}100%{transform:scale(1)}}
+    @keyframes toastSlide{from{transform:translateX(-50%) translateY(70px);opacity:0}to{transform:translateX(-50%) translateY(0);opacity:1}}
+    @keyframes dotPop{from{transform:scale(0);opacity:0}to{transform:scale(1);opacity:1}}
+    @keyframes appFade{from{opacity:0}to{opacity:1}}
+
+    .glass{background:rgba(255,255,255,.055);backdrop-filter:blur(22px) saturate(180%);-webkit-backdrop-filter:blur(22px) saturate(180%);border:1px solid rgba(255,255,255,.10);border-radius:20px}
+    .glass-sm{background:rgba(255,255,255,.07);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.10);border-radius:14px}
+    .btn-violet{background:linear-gradient(135deg,#a78bfa,#7c5ce1);color:#fff;border:none;border-radius:14px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif;transition:transform .15s,box-shadow .15s;-webkit-tap-highlight-color:transparent}
+    .btn-violet:active{transform:scale(.96)}
+    .btn-ghost{background:rgba(255,255,255,.055);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.10);color:rgba(241,245,249,.45);border-radius:12px;cursor:pointer;font-family:'Inter',sans-serif;-webkit-tap-highlight-color:transparent}
+    .input-glass{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:14px;color:#f1f5f9;outline:none;font-family:'Inter',sans-serif;font-size:14px;-webkit-appearance:none;transition:border-color .2s,box-shadow .2s}
+    .input-glass::placeholder{color:rgba(241,245,249,.28)}
+    .input-glass:focus{border-color:#a78bfa;box-shadow:0 0 0 3px rgba(167,139,250,.18)}
+    .pill{border-radius:99px;cursor:pointer;font-family:'Inter',sans-serif;transition:all .15s;-webkit-tap-highlight-color:transparent}
+    .todo-item{transition:opacity .2s}
+    .habit-card{transition:transform .2s,box-shadow .2s}
+    .nav-btn{display:flex;flex-direction:column;align-items:center;gap:3px;background:none;border:none;cursor:pointer;font-family:'Inter',sans-serif;font-size:9px;font-weight:500;letter-spacing:.5px;text-transform:uppercase;-webkit-tap-highlight-color:transparent;transition:color .2s;padding:4px 12px}
+    .app{animation:appFade .4s ease both}
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+// ── Tiny h() helper (no JSX needed) ──────────────────────────────────────
+const {createElement:h,useState,useEffect,useRef,useCallback,Fragment} = React;
+
+// ── Palette ───────────────────────────────────────────────────────────────
+const A = '#a78bfa', TEAL = '#34d399', AMB = '#fbbf24', RED = '#f87171', SKY = '#38bdf8';
+const MUT = 'rgba(241,245,249,.45)', FAINT = 'rgba(241,245,249,.13)';
+
+// ── Storage ───────────────────────────────────────────────────────────────
+const load = (k,d)=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch{return d}};
+const save = (k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}};
+const today = ()=>new Date().toISOString().slice(0,10);
+const fmtDate = ()=>new Date().toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'});
+const greet = ()=>{const hr=new Date().getHours();return hr<12?'Good morning':'hr'<17?'Good afternoon':'Good evening'};
+
+// ── Toast ─────────────────────────────────────────────────────────────────
+function Toast({msg,onDone}){
+  useEffect(()=>{const t=setTimeout(onDone,2300);return()=>clearTimeout(t)},[]);
+  return h('div',{style:{position:'fixed',bottom:96,left:'50%',transform:'translateX(-50%)',zIndex:9999,
+    background:'rgba(18,20,40,.95)',backdropFilter:'blur(20px)',WebkitBackdropFilter:'blur(20px)',
+    border:'1px solid rgba(255,255,255,.14)',borderRadius:99,padding:'10px 22px',
+    color:'#f1f5f9',fontSize:13,fontWeight:600,display:'flex',alignItems:'center',gap:8,whiteSpace:'nowrap',
+    animation:'toastSlide .3s cubic-bezier(.34,1.56,.64,1) forwards'}},
+    h('span',{style:{fontSize:16}},msg.icon),' ',msg.text
+  );
+}
+
+// ── Mini bar chart (no recharts) ──────────────────────────────────────────
+function BarViz({data}){
+  const max = Math.max(...data.map(d=>d.score),1);
+  return h('div',{style:{display:'flex',alignItems:'flex-end',gap:6,height:100,padding:'0 4px'}},
+    data.map((d,i)=>
+      h('div',{key:i,style:{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:4}},
+        h('div',{style:{
+          width:'100%',
+          height: Math.max(4, Math.round(d.score/max*80)),
+          borderRadius:'6px 6px 2px 2px',
+          background:d.score>0?`linear-gradient(180deg,${A},${A}88)`:'rgba(255,255,255,.07)',
+          boxShadow:d.score>0?`0 0 8px ${A}55`:'none',
+          transition:'height .6s cubic-bezier(.34,1.56,.64,1)'
+        }}),
+        h('span',{style:{fontSize:9,color:MUT,fontWeight:500}},d.label)
+      )
+    )
+  );
+}
+
+// ════════════════════════════════════════════════════════════
+// ROOT APP
+// ════════════════════════════════════════════════════════════
+function App(){
+  const [tab,setTab]     = useState('dashboard');
+  const [todos,setTodos] = useState(()=>load('ff_todos',[]));
+  const [habits,setHabits]=useState(()=>load('ff_habits',[]));
+  const [pomo,setPomo]   = useState(()=>load('ff_pomo',{sessions:[],total:0}));
+  const [toast,setToast] = useState(null);
+
+  useEffect(()=>save('ff_todos',todos),[todos]);
+  useEffect(()=>save('ff_habits',habits),[habits]);
+  useEffect(()=>save('ff_pomo',pomo),[pomo]);
+
+  const showToast=(icon,text)=>setToast({icon,text});
+  const addPomo=useCallback((min)=>{
+    setPomo(p=>({sessions:[...p.sessions,{date:today(),minutes:min}],total:p.total+min}));
+    showToast('🍅',`${min}-min session complete!`);
+  },[]);
+
+  const TABS=[
+    {id:'dashboard',icon:'◈',label:'Dashboard'},
+    {id:'todos',    icon:'⬡',label:'Tasks'},
+    {id:'habits',   icon:'◉',label:'Habits'},
+    {id:'pomodoro', icon:'◷',label:'Focus'},
+  ];
+
+  return h(Fragment,null,
+    // BG orbs
+    h('div',{style:{position:'fixed',inset:0,overflow:'hidden',pointerEvents:'none',zIndex:0}},
+      h('div',{style:{position:'absolute',width:500,height:500,borderRadius:'50%',top:-120,left:-100,
+        background:'radial-gradient(circle,rgba(108,60,225,.38) 0%,transparent 70%)',
+        animation:'orbFloat 18s ease-in-out infinite'}}),
+      h('div',{style:{position:'absolute',width:420,height:420,borderRadius:'50%',bottom:-80,right:-80,
+        background:'radial-gradient(circle,rgba(26,111,255,.32) 0%,transparent 70%)',
+        animation:'orbFloat2 22s ease-in-out infinite'}}),
+      h('div',{style:{position:'absolute',width:300,height:300,borderRadius:'50%',top:'40%',right:'8%',
+        background:'radial-gradient(circle,rgba(0,200,180,.22) 0%,transparent 70%)',
+        animation:'orbFloat 28s ease-in-out infinite reverse'}})
+    ),
+    // App shell
+    h('div',{className:'app',style:{position:'relative',zIndex:1,height:'100dvh',display:'flex',flexDirection:'column'}},
+      // Header
+      h('header',{style:{padding:'20px 20px 12px',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}},
+        h('div',null,
+          h('div',{style:{fontFamily:"'Space Grotesk',sans-serif",fontSize:22,fontWeight:700,
+            background:'linear-gradient(90deg,#f1f5f9,#a78bfa)',
+            WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}, 'FocusFlow'),
+          h('div',{style:{fontSize:11,color:MUT,marginTop:1}},fmtDate())
+        ),
+        h('div',{className:'glass-sm',style:{padding:'6px 14px',fontSize:12,color:MUT,display:'flex',alignItems:'center',gap:6}},
+          h('span',{style:{width:7,height:7,borderRadius:'50%',background:TEAL,display:'inline-block',
+            boxShadow:`0 0 6px ${TEAL}`,animation:'pulse 2s infinite'}}),
+          'Active'
+        )
+      ),
+      // Content
+      h('main',{style:{flex:1,overflowY:'auto',padding:'0 16px 80px',WebkitOverflowScrolling:'touch'}},
+        tab==='dashboard' && h(Dashboard,{todos,habits,pomo}),
+        tab==='todos'     && h(Todos,{todos,setTodos,showToast}),
+        tab==='habits'    && h(Habits,{habits,setHabits,showToast}),
+        tab==='pomodoro'  && h(Pomodoro,{pomo,onDone:addPomo})
+      ),
+      // Bottom nav
+      h('nav',{style:{position:'fixed',bottom:0,left:0,right:0,zIndex:100,
+        background:'rgba(5,8,20,.8)',backdropFilter:'blur(28px) saturate(180%)',
+        WebkitBackdropFilter:'blur(28px) saturate(180%)',
+        borderTop:'1px solid rgba(255,255,255,.08)',
+        display:'flex',justifyContent:'space-around',padding:'8px 0 20px'}},
+        TABS.map(t=>{
+          const active=tab===t.id;
+          return h('button',{key:t.id,className:'nav-btn',onClick:()=>setTab(t.id),
+            style:{color:active?A:FAINT,fontWeight:active?700:400,position:'relative'}},
+            h('span',{style:{fontSize:22,lineHeight:1,transition:'transform .2s',transform:active?'scale(1.12)':'scale(1)'}},t.icon),
+            t.label,
+            active && h('span',{style:{position:'absolute',top:-8,left:'50%',transform:'translateX(-50%)',
+              width:18,height:2,borderRadius:99,background:A}})
+          );
+        })
+      ),
+      toast && h(Toast,{msg:toast,onDone:()=>setToast(null)})
+    )
+  );
+}
+
+// ════════════════════════════════════════════════════════════
+// DASHBOARD
+// ════════════════════════════════════════════════════════════
+function Dashboard({todos,habits,pomo}){
+  const done=todos.filter(t=>t.done).length;
+  const pct=todos.length?Math.round(done/todos.length*100):0;
+  const todayH=habits.filter(h=>(h.log||[]).includes(today())).length;
+  const todayMin=pomo.sessions.filter(s=>s.date===today()).reduce((a,s)=>a+s.minutes,0);
+  const maxStreak=habits.reduce((m,h)=>Math.max(m,h.streak||0),0);
+
+  const last7=Array.from({length:7},(_,i)=>{
+    const d=new Date();d.setDate(d.getDate()-(6-i));
+    const key=d.toISOString().slice(0,10);
+    const label=d.toLocaleDateString('en-US',{weekday:'short'});
+    const hs=habits.filter(hb=>(hb.log||[]).includes(key)).length;
+    const ps=pomo.sessions.filter(s=>s.date===key).reduce((a,s)=>a+s.minutes,0);
+    const ts=todos.filter(t=>t.completedOn===key).length;
+    return{label,score:hs*2+Math.floor(ps/10)+ts};
+  });
+
+  const StatCard=({icon,value,label,color,delay})=>
+    h('div',{className:'glass',style:{flex:1,padding:'14px 10px',textAlign:'center',
+      borderColor:`${color}33`,animation:`scaleIn .4s ${delay}s ease both`}},
+      h('div',{style:{fontSize:22,marginBottom:3}},icon),
+      h('div',{style:{fontSize:24,fontWeight:800,color,fontFamily:"'Space Grotesk',sans-serif",
+        textShadow:`0 0 18px ${color}66`}},value),
+      h('div',{style:{fontSize:10,color:MUT,marginTop:2,fontWeight:500,letterSpacing:.4}},label)
+    );
+
+  return h('div',{style:{display:'flex',flexDirection:'column',gap:14,paddingTop:4}},
+    h('div',{style:{animation:'fadeUp .3s ease both'}},
+      h('div',{style:{fontFamily:"'Space Grotesk',sans-serif",fontSize:20,fontWeight:700}},
+        `${new Date().getHours()<12?'Good morning':new Date().getHours()<17?'Good afternoon':'Good evening'} 👋`),
+      h('div',{style:{fontSize:12,color:MUT,marginTop:2}},"Here's your productivity overview")
+    ),
+    h('div',{style:{display:'flex',gap:10,animation:'fadeUp .35s .04s ease both'}},
+      h(StatCard,{icon:'✦',value:`${pct}%`,label:'Tasks Done',color:TEAL,delay:.04}),
+      h(StatCard,{icon:'◉',value:todayH,label:'Habits Today',color:A,delay:.08}),
+      h(StatCard,{icon:'◷',value:`${todayMin}m`,label:'Focus Time',color:AMB,delay:.12})
+    ),
+    h('div',{className:'glass',style:{padding:'18px 16px',animation:'fadeUp .4s .08s ease both'}},
+      h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}},
+        h('span',{style:{fontWeight:700,fontSize:13}},'Weekly Performance'),
+        h('span',{style:{fontSize:11,color:MUT,fontWeight:400}},'last 7 days')
+      ),
+      h(BarViz,{data:last7})
+    ),
+    maxStreak>0 && h('div',{className:'glass',style:{padding:'14px 16px',display:'flex',alignItems:'center',gap:12,
+      borderColor:`${AMB}33`,animation:'fadeUp .4s .12s ease both'}},
+      h('span',{style:{fontSize:32,animation:'streakBounce .6s .8s ease both',display:'inline-block'}},'🔥'),
+      h('div',null,
+        h('div',{style:{fontWeight:700,fontSize:14}},'Best streak: ',h('span',{style:{color:AMB}},`${maxStreak} days`)),
+        h('div',{style:{fontSize:12,color:MUT}},'Keep the momentum going!')
+      )
+    ),
+    todos.length>0 && h('div',{className:'glass',style:{padding:'16px',animation:'fadeUp .4s .16s ease both'}},
+      h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}},
+        h('span',{style:{fontWeight:600,fontSize:13}},'Task Progress'),
+        h('span',{style:{fontSize:12,color:MUT}},`${done} / ${todos.length}`)
+      ),
+      h('div',{style:{height:6,background:'rgba(255,255,255,.07)',borderRadius:99,overflow:'hidden'}},
+        h('div',{style:{height:'100%',width:`${pct}%`,borderRadius:99,
+          background:`linear-gradient(90deg,${A},${TEAL})`,
+          boxShadow:`0 0 10px ${A}66`,transition:'width .9s cubic-bezier(.34,1.56,.64,1)'}})
+      )
+    )
+  );
+}
+
+// ════════════════════════════════════════════════════════════
+// TODOS
+// ════════════════════════════════════════════════════════════
+const PRI=[
+  {id:'high',  label:'High',color:RED},
+  {id:'medium',label:'Med', color:AMB},
+  {id:'low',   label:'Low', color:TEAL},
+];
+function Todos({todos,setTodos,showToast}){
+  const [text,setText]=useState('');
+  const [pri,setPri]=useState('medium');
+  const [filter,setFilter]=useState('all');
+  const inputRef=useRef(null);
+  const pc=p=>PRI.find(x=>x.id===p)?.color||MUT;
+
+  const add=()=>{
+    if(!text.trim())return;
+    setTodos(t=>[...t,{id:Date.now(),text:text.trim(),done:false,priority:pri,created:today()}]);
+    setText('');showToast('✦','Task added');
+  };
+  const toggle=id=>setTodos(ts=>ts.map(t=>{
+    if(t.id!==id)return t;
+    const done=!t.done;
+    if(done)showToast('✅','Task complete!');
+    return{...t,done,completedOn:done?today():null};
+  }));
+  const remove=id=>{setTodos(t=>t.filter(x=>x.id!==id));showToast('✕','Removed')};
+
+  const visible=todos.filter(t=>
+    filter==='all'?true:filter==='open'?!t.done:filter==='done'?t.done:t.priority===filter
+  );
+
+  return h('div',{style:{display:'flex',flexDirection:'column',gap:14,paddingTop:4}},
+    h('div',{style:{animation:'fadeUp .3s ease both'}},
+      h('div',{style:{fontFamily:"'Space Grotesk',sans-serif",fontSize:20,fontWeight:700}},'Tasks'),
+      h('div',{style:{fontSize:12,color:MUT,marginTop:1}},`${todos.filter(t=>!t.done).length} remaining`)
+    ),
+    // Input
+    h('div',{className:'glass',style:{padding:16,animation:'fadeUp .35s .04s ease both'}},
+      h('input',{ref:inputRef,className:'input-glass',value:text,placeholder:'What needs to be done?',
+        onChange:e=>setText(e.target.value),onKeyDown:e=>e.key==='Enter'&&add(),
+        style:{width:'100%',padding:'12px 16px',marginBottom:12}}),
+      h('div',{style:{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}},
+        PRI.map(p=>h('button',{key:p.id,className:'pill',onClick:()=>setPri(p.id),style:{
+          background:pri===p.id?`${p.color}22`:'rgba(255,255,255,.04)',
+          border:`1px solid ${pri===p.id?p.color:'rgba(255,255,255,.1)'}`,
+          color:pri===p.id?p.color:MUT,padding:'5px 13px',fontSize:12,fontWeight:pri===p.id?700:400
+        }},
+          h('span',{style:{fontSize:8,marginRight:4}},'●'),p.label
+        )),
+        h('button',{className:'btn-violet',onClick:add,style:{marginLeft:'auto',padding:'8px 20px',fontSize:13,borderRadius:12}},
+          '+ Add'
+        )
+      )
+    ),
+    // Filters
+    h('div',{style:{display:'flex',gap:8,flexWrap:'wrap',animation:'fadeUp .35s .08s ease both'}},
+      [['all','All'],['open','Open'],['done','Done'],['high','High']].map(([id,lb])=>
+        h('button',{key:id,className:'pill',onClick:()=>setFilter(id),style:{
+          background:filter===id?`${A}22`:'rgba(255,255,255,.04)',
+          border:`1px solid ${filter===id?A:'rgba(255,255,255,.1)'}`,
+          color:filter===id?A:MUT,padding:'6px 14px',fontSize:12,fontWeight:filter===id?700:400
+        }},lb)
+      )
+    ),
+    // List
+    h('div',{style:{display:'flex',flexDirection:'column',gap:8}},
+      visible.length===0 && h('div',{style:{textAlign:'center',padding:'44px 0',color:MUT,fontSize:13,animation:'fadeIn .4s ease'}},
+        h('div',{style:{fontSize:28,marginBottom:8}},'✦'),
+        filter==='done'?'Nothing completed yet':'All clear — add a task above'
+      ),
+      visible.map((t,i)=>h('div',{key:t.id,className:'glass-sm todo-item',style:{
+        padding:'13px 14px',display:'flex',alignItems:'center',gap:12,
+        borderColor:t.done?'rgba(255,255,255,.07)':`${pc(t.priority)}33`,
+        opacity:t.done?.55:1,animation:`fadeUp .3s ${i*.04}s ease both`
+      }},
+        h('button',{onClick:()=>toggle(t.id),style:{
+          width:22,height:22,borderRadius:7,flexShrink:0,cursor:'pointer',
+          background:t.done?TEAL:'transparent',
+          border:`2px solid ${t.done?TEAL:pc(t.priority)}`,
+          display:'flex',alignItems:'center',justifyContent:'center',
+          transition:'all .2s',boxShadow:t.done?`0 0 10px ${TEAL}55`:'none'
+        }},
+          t.done && h('span',{style:{color:'#fff',fontSize:11,fontWeight:900,animation:'checkPop .3s cubic-bezier(.34,1.56,.64,1)'}},'✓')
+        ),
+        h('span',{style:{flex:1,fontSize:14,fontWeight:500,
+          textDecoration:t.done?'line-through':'none',color:t.done?MUT:'#f1f5f9'}},t.text),
+        h('div',{style:{width:6,height:6,borderRadius:'50%',background:pc(t.priority),
+          flexShrink:0,boxShadow:`0 0 5px ${pc(t.priority)}88`}}),
+        h('button',{onClick:()=>remove(t.id),style:{background:'none',border:'none',
+          color:FAINT,cursor:'pointer',fontSize:18,padding:'0 0 0 4px',lineHeight:1}},
+          '×'
+        )
+      ))
+    )
+  );
+}
+
+// ════════════════════════════════════════════════════════════
+// HABITS
+// ════════════════════════════════════════════════════════════
+const HICONS=['💪','📚','🧘','🏃','💧','🥗','😴','✍️','🎯','🎸','🌿','🧠','🌅','🫀','🧊','🎨'];
+function Habits({habits,setHabits,showToast}){
+  const [open,setOpen]=useState(false);
+  const [name,setName]=useState('');
+  const [icon,setIcon]=useState('💪');
+
+  const calcStreak=log=>{
+    let s=0,d=new Date();
+    for(;;){const k=d.toISOString().slice(0,10);if(log.includes(k)){s++;d.setDate(d.getDate()-1)}else break}
+    return s;
+  };
+  const addH=()=>{
+    if(!name.trim())return;
+    setHabits(h=>[...h,{id:Date.now(),name:name.trim(),icon,log:[],streak:0}]);
+    setName('');setOpen(false);showToast('◉','Habit created');
+  };
+  const toggle=id=>setHabits(h=>h.map(hab=>{
+    if(hab.id!==id)return hab;
+    const log=hab.log||[],t=today();
+    const nl=log.includes(t)?log.filter(d=>d!==t):[...log,t];
+    if(!log.includes(t))showToast('🔥','Habit logged!');
+    return{...hab,log:nl,streak:calcStreak(nl)};
+  }));
+  const remove=id=>{setHabits(h=>h.filter(x=>x.id!==id));showToast('✕','Removed')};
+
+  const last14=Array.from({length:14},(_,i)=>{
+    const d=new Date();d.setDate(d.getDate()-(13-i));return d.toISOString().slice(0,10);
+  });
+
+  return h('div',{style:{display:'flex',flexDirection:'column',gap:14,paddingTop:4}},
+    h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',animation:'fadeUp .3s ease both'}},
+      h('div',null,
+        h('div',{style:{fontFamily:"'Space Grotesk',sans-serif",fontSize:20,fontWeight:700}},'Habits'),
+        h('div',{style:{fontSize:12,color:MUT,marginTop:1}},`${habits.length} active habits`)
+      ),
+      h('button',{className:'btn-violet',onClick:()=>setOpen(!open),style:{padding:'9px 16px',fontSize:13}},
+        open?'Cancel':'+ New'
+      )
+    ),
+    open && h('div',{className:'glass',style:{padding:16,animation:'scaleIn .22s ease both'}},
+      h('input',{className:'input-glass',value:name,onChange:e=>setName(e.target.value),
+        placeholder:'Habit name...',style:{width:'100%',padding:'12px 16px',marginBottom:12}}),
+      h('div',{style:{display:'flex',flexWrap:'wrap',gap:7,marginBottom:14}},
+        HICONS.map(ic=>h('button',{key:ic,onClick:()=>setIcon(ic),style:{
+          fontSize:21,padding:'6px 7px',borderRadius:10,cursor:'pointer',
+          background:ic===icon?`${A}33`:'rgba(255,255,255,.04)',
+          border:`1.5px solid ${ic===icon?A:'transparent'}`,transition:'all .15s'
+        }},ic))
+      ),
+      h('button',{className:'btn-violet',onClick:addH,style:{width:'100%',padding:12,fontSize:14}},
+        'Create Habit'
+      )
+    ),
+    h('div',{style:{display:'flex',flexDirection:'column',gap:10}},
+      habits.length===0&&!open && h('div',{style:{textAlign:'center',padding:'44px 0',color:MUT,fontSize:13,animation:'fadeIn .4s ease'}},
+        h('div',{style:{fontSize:28,marginBottom:8}},'◉'),
+        'Build your first habit — small steps, big change'
+      ),
+      habits.map((hb,i)=>{
+        const done=(hb.log||[]).includes(today());
+        return h('div',{key:hb.id,className:'glass habit-card',style:{
+          padding:16,animation:`fadeUp .3s ${i*.05}s ease both`,
+          borderColor:done?`${A}44`:'rgba(255,255,255,.09)'
+        }},
+          h('div',{style:{display:'flex',alignItems:'center',gap:12,marginBottom:12}},
+            h('button',{onClick:()=>toggle(hb.id),style:{
+              width:44,height:44,borderRadius:14,flexShrink:0,cursor:'pointer',fontSize:20,
+              background:done?`linear-gradient(135deg,${A},#7c5ce1)`:'rgba(255,255,255,.06)',
+              border:`1.5px solid ${done?A:'rgba(255,255,255,.12)'}`,
+              display:'flex',alignItems:'center',justifyContent:'center',
+              transition:'all .25s cubic-bezier(.34,1.56,.64,1)',
+              boxShadow:done?`0 4px 18px ${A}55`:'none',
+              transform:done?'scale(1.05)':'scale(1)'
+            }},done?'✓':hb.icon),
+            h('div',{style:{flex:1}},
+              h('div',{style:{fontWeight:700,fontSize:15}},(hb.name)),
+              h('div',{style:{fontSize:11,color:MUT,marginTop:2}},
+                `🔥 ${hb.streak||0} day streak · ${(hb.log||[]).length} total`
+              )
+            ),
+            h('button',{onClick:()=>remove(hb.id),style:{background:'none',border:'none',
+              color:FAINT,cursor:'pointer',fontSize:18,lineHeight:1}},'×')
+          ),
+          // 14-day heatmap
+          h('div',{style:{display:'flex',gap:3}},
+            last14.map((d,idx)=>{
+              const f=(hb.log||[]).includes(d);
+              return h('div',{key:d,style:{
+                flex:1,height:9,borderRadius:3,
+                background:f?`linear-gradient(90deg,${A},${TEAL})`:'rgba(255,255,255,.07)',
+                boxShadow:f?`0 0 5px ${A}55`:'none',
+                animation:f?`dotPop .3s ${idx*.02}s ease both`:'none'
+              }});
+            })
+          ),
+          hb.streak>0 && h('div',{style:{marginTop:9,height:3,background:'rgba(255,255,255,.06)',borderRadius:99,overflow:'hidden'}},
+            h('div',{style:{
+              height:'100%',borderRadius:99,
+              width:`${Math.min(100,((hb.streak||0)/30)*100)}%`,
+              background:`linear-gradient(90deg,${A},${AMB})`,
+              boxShadow:`0 0 8px ${A}55`,
+              transition:'width 1s cubic-bezier(.34,1.56,.64,1)'
+            }})
+          )
+        );
+      })
+    )
+  );
+}
+
+// ════════════════════════════════════════════════════════════
+// POMODORO
+// ════════════════════════════════════════════════════════════
+const MODES=[
+  {id:'work', label:'Focus',       min:25,color:A,   emoji:'◷'},
+  {id:'short',label:'Short break', min:5, color:TEAL, emoji:'☕'},
+  {id:'long', label:'Long break',  min:15,color:SKY,  emoji:'🌿'},
+];
+function Pomodoro({pomo,onDone}){
+  const [modeId,setModeId]=useState('work');
+  const [secs,setSecs]=useState(25*60);
+  const [running,setRun]=useState(false);
+  const [ring,setRing]=useState(false);
+  const intRef=useRef(null);
+  const mode=MODES.find(m=>m.id===modeId);
+
+  useEffect(()=>{
+    if(running){
+      intRef.current=setInterval(()=>setSecs(s=>{
+        if(s<=1){
+          clearInterval(intRef.current);setRun(false);setRing(true);
+          setTimeout(()=>setRing(false),1200);
+          if(modeId==='work')onDone(mode.min);
+          return 0;
+        }
+        return s-1;
+      }),1000);
+    }else clearInterval(intRef.current);
+    return()=>clearInterval(intRef.current);
+  },[running,modeId]);
+
+  const switchMode=m=>{setModeId(m);setRun(false);setSecs(MODES.find(x=>x.id===m).min*60)};
+  const reset=()=>{setRun(false);setSecs(mode.min*60)};
+  const mm=String(Math.floor(secs/60)).padStart(2,'0');
+  const ss=String(secs%60).padStart(2,'0');
+  const R=95,circ=2*Math.PI*R,pct=1-secs/(mode.min*60);
+  const todaySess=pomo.sessions.filter(s=>s.date===today());
+  const todayMin=todaySess.reduce((a,s)=>a+s.minutes,0);
+
+  return h('div',{style:{display:'flex',flexDirection:'column',gap:18,alignItems:'center',paddingTop:4}},
+    h('div',{style:{alignSelf:'flex-start',animation:'fadeUp .3s ease both'}},
+      h('div',{style:{fontFamily:"'Space Grotesk',sans-serif",fontSize:20,fontWeight:700}},'Focus Timer'),
+      h('div',{style:{fontSize:12,color:MUT,marginTop:1}},'Stay in the zone')
+    ),
+    // Mode pills
+    h('div',{style:{display:'flex',gap:8,animation:'fadeUp .35s .04s ease both'}},
+      MODES.map(m=>h('button',{key:m.id,className:'pill',onClick:()=>switchMode(m.id),style:{
+        background:modeId===m.id?`${m.color}22`:'rgba(255,255,255,.04)',
+        border:`1px solid ${modeId===m.id?m.color:'rgba(255,255,255,.1)'}`,
+        color:modeId===m.id?m.color:MUT,padding:'7px 13px',fontSize:12,fontWeight:modeId===m.id?700:400
+      }},`${m.emoji} ${m.label}`))
+    ),
+    // Circle
+    h('div',{style:{position:'relative',width:230,height:230,animation:'scaleIn .4s .08s ease both'}},
+      // Glow
+      h('div',{style:{position:'absolute',inset:0,borderRadius:'50%',
+        background:`radial-gradient(circle,${mode.color}1e 0%,transparent 70%)`,
+        animation:running?'pulse 2s infinite':'none'}}),
+      h('svg',{width:230,height:230,style:{transform:'rotate(-90deg)',position:'relative'}},
+        h('circle',{cx:115,cy:115,r:R,fill:'none',stroke:'rgba(255,255,255,.07)',strokeWidth:10}),
+        h('circle',{cx:115,cy:115,r:R,fill:'none',stroke:mode.color,strokeWidth:10,
+          strokeDasharray:circ,strokeDashoffset:circ*(1-pct),strokeLinecap:'round',
+          style:{transition:'stroke-dashoffset 1s linear',filter:`drop-shadow(0 0 8px ${mode.color}88)`}})
+      ),
+      // Timer text
+      h('div',{style:{position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}},
+        h('div',{style:{fontFamily:"'Space Grotesk',sans-serif",fontSize:50,fontWeight:700,
+          letterSpacing:-2,color:mode.color,lineHeight:1,
+          textShadow:`0 0 28px ${mode.color}66`,
+          animation:ring?'ringPulse .4s ease 3':'none'}},`${mm}:${ss}`),
+        h('div',{style:{fontSize:11,color:MUT,marginTop:6,fontWeight:500,letterSpacing:.5,textTransform:'uppercase'}},
+          running?'Focusing…':secs===0?'Done!':mode.label
+        )
+      )
+    ),
+    // Controls
+    h('div',{style:{display:'flex',gap:12,animation:'fadeUp .4s .12s ease both'}},
+      h('button',{className:'btn-ghost',onClick:reset,style:{padding:'12px 18px',fontSize:18}},'↩'),
+      h('button',{className:'btn-violet',onClick:()=>setRun(r=>!r),style:{
+        padding:'13px 44px',fontSize:16,borderRadius:16,minWidth:152,
+        background:running?`linear-gradient(135deg,${RED},#c0392b)`:`linear-gradient(135deg,${mode.color},#7c5ce1)`
+      }},running?'⏸  Pause':'▶  Start')
+    ),
+    // Stats
+    h('div',{className:'glass',style:{width:'100%',padding:'16px 20px',display:'flex',justifyContent:'space-around',
+      animation:'fadeUp .4s .16s ease both'}},
+      [{value:todaySess.length,label:'Sessions',color:mode.color},
+       {value:`${todayMin}m`,label:'Focus time',color:TEAL},
+       {value:`${pomo.total}m`,label:'All time',color:AMB}
+      ].map((s,i)=>h('div',{key:i,style:{textAlign:'center'}},
+        h('div',{style:{fontSize:22,fontWeight:800,color:s.color,fontFamily:"'Space Grotesk',sans-serif",
+          textShadow:`0 0 14px ${s.color}55`}},s.value),
+        h('div',{style:{fontSize:11,color:MUT,marginTop:2}},s.label)
+      ))
+    ),
+    todaySess.length>0 && h('div',{style:{display:'flex',gap:7,flexWrap:'wrap',justifyContent:'center',
+      animation:'fadeIn .4s .2s ease both'}},
+      todaySess.map((_,i)=>h('div',{key:i,style:{width:10,height:10,borderRadius:'50%',
+        background:`linear-gradient(135deg,${A},${TEAL})`,
+        boxShadow:`0 0 7px ${A}66`,animation:`dotPop .3s ${i*.05}s ease both`}}))
+    )
+  );
+}
+
+// ── Mount ─────────────────────────────────────────────────────────────────
+const container = document.getElementById('root');
+const reactRoot = ReactDOM.createRoot(container);
+reactRoot.render(React.createElement(App));
+</script>
+</body>
+</html>

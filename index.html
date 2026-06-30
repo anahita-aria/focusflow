@@ -101,7 +101,21 @@ function BarViz({data}){
 // ════════════════════════════════════════════════════════════
 function App(){
   const [tab,setTab]     = useState('dashboard');
-  const [todos,setTodos] = useState(()=>load('ff_todos',[]));
+  const [todos,setTodos] = useState(()=>{
+    const t = load('ff_todos',[]);
+    const lastReset = load('ff_last_reset', today());
+    const t2 = today();
+    if(lastReset !== t2){
+      // New day: reset recurring tasks to unchecked, keep one-time tasks as-is
+      const resetTodos = t.map(task=>
+        task.recurring ? {...task, done:false, completedOn:null} : task
+      );
+      save('ff_last_reset', t2);
+      save('ff_todos', resetTodos);
+      return resetTodos;
+    }
+    return t;
+  });
   const [habits,setHabits]=useState(()=>load('ff_habits',[]));
   const [pomo,setPomo]   = useState(()=>load('ff_pomo',{sessions:[],total:0}));
   const [toast,setToast] = useState(null);
@@ -261,14 +275,15 @@ const PRI=[
 function Todos({todos,setTodos,showToast}){
   const [text,setText]=useState('');
   const [pri,setPri]=useState('medium');
+  const [recurring,setRecurring]=useState(false);
   const [filter,setFilter]=useState('all');
   const inputRef=useRef(null);
   const pc=p=>PRI.find(x=>x.id===p)?.color||MUT;
 
   const add=()=>{
     if(!text.trim())return;
-    setTodos(t=>[...t,{id:Date.now(),text:text.trim(),done:false,priority:pri,created:today()}]);
-    setText('');showToast('✦','Task added');
+    setTodos(t=>[...t,{id:Date.now(),text:text.trim(),done:false,priority:pri,recurring,created:today()}]);
+    setText('');showToast('✦',recurring?'Daily task added':'Task added');
   };
   const toggle=id=>setTodos(ts=>ts.map(t=>{
     if(t.id!==id)return t;
@@ -292,6 +307,17 @@ function Todos({todos,setTodos,showToast}){
       h('input',{ref:inputRef,className:'input-glass',value:text,placeholder:'What needs to be done?',
         onChange:e=>setText(e.target.value),onKeyDown:e=>e.key==='Enter'&&add(),
         style:{width:'100%',padding:'12px 16px',marginBottom:12}}),
+      h('div',{style:{display:'flex',gap:8,alignItems:'center',marginBottom:12}},
+        h('button',{className:'pill',onClick:()=>setRecurring(!recurring),style:{
+          background:recurring?`${A}22`:'rgba(255,255,255,.04)',
+          border:`1px solid ${recurring?A:'rgba(255,255,255,.1)'}`,
+          color:recurring?A:MUT,padding:'6px 13px',fontSize:12,fontWeight:recurring?700:400,
+          display:'flex',alignItems:'center',gap:5
+        }},
+          h('span',{style:{fontSize:13}},recurring?'🔁':'1️⃣'),
+          recurring?'Daily (recurring)':'One-time'
+        )
+      ),
       h('div',{style:{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}},
         PRI.map(p=>h('button',{key:p.id,className:'pill',onClick:()=>setPri(p.id),style:{
           background:pri===p.id?`${p.color}22`:'rgba(255,255,255,.04)',
@@ -336,7 +362,11 @@ function Todos({todos,setTodos,showToast}){
           t.done && h('span',{style:{color:'#fff',fontSize:11,fontWeight:900,animation:'checkPop .3s cubic-bezier(.34,1.56,.64,1)'}},'✓')
         ),
         h('span',{style:{flex:1,fontSize:14,fontWeight:500,
-          textDecoration:t.done?'line-through':'none',color:t.done?MUT:'#f1f5f9'}},t.text),
+          textDecoration:t.done?'line-through':'none',color:t.done?MUT:'#f1f5f9',
+          display:'flex',alignItems:'center',gap:6}},
+          t.text,
+          t.recurring && h('span',{style:{fontSize:10,opacity:.6}},'🔁')
+        ),
         h('div',{style:{width:6,height:6,borderRadius:'50%',background:pc(t.priority),
           flexShrink:0,boxShadow:`0 0 5px ${pc(t.priority)}88`}}),
         h('button',{onClick:()=>remove(t.id),style:{background:'none',border:'none',
@@ -464,54 +494,179 @@ function Habits({habits,setHabits,showToast}){
 // ════════════════════════════════════════════════════════════
 // POMODORO
 // ════════════════════════════════════════════════════════════
+const DEFAULT_DURATIONS = { work:25, short:5, long:15 };
 const MODES=[
-  {id:'work', label:'Focus',       min:25,color:A,   emoji:'◷'},
-  {id:'short',label:'Short break', min:5, color:TEAL, emoji:'☕'},
-  {id:'long', label:'Long break',  min:15,color:SKY,  emoji:'🌿'},
+  {id:'work', label:'Focus',       color:A,   emoji:'◷'},
+  {id:'short',label:'Short break', color:TEAL, emoji:'☕'},
+  {id:'long', label:'Long break',  color:SKY,  emoji:'🌿'},
 ];
+const DURATION_PRESETS = {
+  work:  [15,25,30,45,50,60],
+  short: [5,10,15],
+  long:  [15,20,30],
+};
 function Pomodoro({pomo,onDone}){
+  const [durations,setDurations]=useState(()=>load('ff_durations', DEFAULT_DURATIONS));
   const [modeId,setModeId]=useState('work');
-  const [secs,setSecs]=useState(25*60);
+  const [secs,setSecs]=useState(durations.work*60);
   const [running,setRun]=useState(false);
   const [ring,setRing]=useState(false);
+  const [showSettings,setShowSettings]=useState(false);
+  const [customInput,setCustomInput]=useState('');
   const intRef=useRef(null);
+  const endTimeRef=useRef(null); // timestamp (ms) when timer should finish
+  const audioCtxRef=useRef(null);
   const mode=MODES.find(m=>m.id===modeId);
+  const modeMin=durations[modeId];
 
+  useEffect(()=>save('ff_durations',durations),[durations]);
+
+  const setModeDuration=(id,min)=>{
+    if(!min || min<1 || min>180) return;
+    setDurations(d=>({...d,[id]:min}));
+    if(id===modeId && !running){ setSecs(min*60); endTimeRef.current=null; }
+  };
+
+  // Request notification permission once on first interaction
+  const ensureNotifyPermission=()=>{
+    if('Notification' in window && Notification.permission==='default'){
+      Notification.requestPermission();
+    }
+  };
+
+  // Play an audible alarm using Web Audio API (works without external files)
+  const playAlarm=()=>{
+    try{
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      const ctx = audioCtxRef.current || new Ctx();
+      audioCtxRef.current = ctx;
+      const now = ctx.currentTime;
+      // 3 short beeps
+      [0,0.35,0.7].forEach(offset=>{
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type='sine';
+        osc.frequency.value=880;
+        gain.gain.setValueAtTime(0.0001, now+offset);
+        gain.gain.exponentialRampToValueAtTime(0.35, now+offset+0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now+offset+0.28);
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(now+offset); osc.stop(now+offset+0.3);
+      });
+    }catch(e){/* audio not available */}
+  };
+
+  const notify=(title,body)=>{
+    if('Notification' in window && Notification.permission==='granted'){
+      try{ new Notification(title,{body, icon:undefined}); }catch(e){}
+    }
+  };
+
+  const finishSession=()=>{
+    setRun(false); setRing(true);
+    endTimeRef.current=null;
+    setTimeout(()=>setRing(false),1200);
+    playAlarm();
+    notify(mode.id==='work' ? '✅ Focus session complete!' : '🔔 Break is over!',
+      mode.id==='work' ? 'Great job! Time for a break.' : 'Ready to focus again?');
+    if(mode.id==='work') onDone(modeMin);
+  };
+
+  // Timestamp-driven ticking: recalculates remaining time from real clock,
+  // so it stays accurate even if the tab is backgrounded/throttled.
   useEffect(()=>{
     if(running){
-      intRef.current=setInterval(()=>setSecs(s=>{
-        if(s<=1){
-          clearInterval(intRef.current);setRun(false);setRing(true);
-          setTimeout(()=>setRing(false),1200);
-          if(modeId==='work')onDone(mode.min);
-          return 0;
+      if(!endTimeRef.current){
+        endTimeRef.current = Date.now() + secs*1000;
+      }
+      const tick=()=>{
+        const remaining = Math.round((endTimeRef.current - Date.now())/1000);
+        if(remaining<=0){
+          setSecs(0);
+          finishSession();
+        }else{
+          setSecs(remaining);
         }
-        return s-1;
-      }),1000);
-    }else clearInterval(intRef.current);
-    return()=>clearInterval(intRef.current);
+      };
+      tick(); // immediate sync
+      intRef.current=setInterval(tick,1000);
+      // Re-sync instantly when tab becomes visible again (in case interval was throttled)
+      const onVis=()=>{ if(document.visibilityState==='visible') tick(); };
+      document.addEventListener('visibilitychange', onVis);
+      return()=>{ clearInterval(intRef.current); document.removeEventListener('visibilitychange', onVis); };
+    }else{
+      clearInterval(intRef.current);
+    }
   },[running,modeId]);
 
-  const switchMode=m=>{setModeId(m);setRun(false);setSecs(MODES.find(x=>x.id===m).min*60)};
-  const reset=()=>{setRun(false);setSecs(mode.min*60)};
+  const switchMode=m=>{
+    setModeId(m); setRun(false);
+    endTimeRef.current=null;
+    setSecs(durations[m]*60);
+  };
+  const reset=()=>{ setRun(false); endTimeRef.current=null; setSecs(modeMin*60); };
+  const toggleRun=()=>{
+    ensureNotifyPermission();
+    if(!running){
+      endTimeRef.current = Date.now() + secs*1000; // (re)anchor to real clock
+    }else{
+      endTimeRef.current=null;
+    }
+    setRun(r=>!r);
+  };
+
   const mm=String(Math.floor(secs/60)).padStart(2,'0');
   const ss=String(secs%60).padStart(2,'0');
-  const R=95,circ=2*Math.PI*R,pct=1-secs/(mode.min*60);
+  const R=95,circ=2*Math.PI*R,pct=1-secs/(modeMin*60);
   const todaySess=pomo.sessions.filter(s=>s.date===today());
   const todayMin=todaySess.reduce((a,s)=>a+s.minutes,0);
 
   return h('div',{style:{display:'flex',flexDirection:'column',gap:18,alignItems:'center',paddingTop:4}},
     h('div',{style:{alignSelf:'flex-start',animation:'fadeUp .3s ease both'}},
       h('div',{style:{fontFamily:"'Space Grotesk',sans-serif",fontSize:20,fontWeight:700}},'Focus Timer'),
-      h('div',{style:{fontSize:12,color:MUT,marginTop:1}},'Stay in the zone')
+      h('div',{style:{fontSize:12,color:MUT,marginTop:1}},'Runs in the background — switch tabs freely')
     ),
-    // Mode pills
-    h('div',{style:{display:'flex',gap:8,animation:'fadeUp .35s .04s ease both'}},
+    // Mode pills + settings toggle
+    h('div',{style:{display:'flex',gap:8,alignItems:'center',animation:'fadeUp .35s .04s ease both'}},
       MODES.map(m=>h('button',{key:m.id,className:'pill',onClick:()=>switchMode(m.id),style:{
         background:modeId===m.id?`${m.color}22`:'rgba(255,255,255,.04)',
         border:`1px solid ${modeId===m.id?m.color:'rgba(255,255,255,.1)'}`,
         color:modeId===m.id?m.color:MUT,padding:'7px 13px',fontSize:12,fontWeight:modeId===m.id?700:400
-      }},`${m.emoji} ${m.label}`))
+      }},`${m.emoji} ${m.label}`)),
+      h('button',{className:'btn-ghost',onClick:()=>setShowSettings(s=>!s),style:{
+        padding:'7px 11px',fontSize:14,borderRadius:99,
+        color:showSettings?A:MUT,borderColor:showSettings?A:'rgba(255,255,255,.1)'
+      }},'⚙')
+    ),
+    // Settings panel — customize duration per mode
+    showSettings && h('div',{className:'glass',style:{width:'100%',padding:16,animation:'scaleIn .22s ease both'}},
+      h('div',{style:{fontSize:13,fontWeight:700,marginBottom:12}},`${mode.emoji} ${mode.label} duration`),
+      h('div',{style:{display:'flex',gap:7,flexWrap:'wrap',marginBottom:12}},
+        DURATION_PRESETS[modeId].map(p=>h('button',{key:p,className:'pill',
+          onClick:()=>setModeDuration(modeId,p),style:{
+            background:modeMin===p?`${mode.color}22`:'rgba(255,255,255,.04)',
+            border:`1px solid ${modeMin===p?mode.color:'rgba(255,255,255,.1)'}`,
+            color:modeMin===p?mode.color:MUT,padding:'7px 14px',fontSize:13,
+            fontWeight:modeMin===p?700:400
+          }},`${p}m`)
+        )
+      ),
+      h('div',{style:{display:'flex',gap:8,alignItems:'center'}},
+        h('input',{className:'input-glass',type:'number',min:1,max:180,
+          placeholder:'Custom minutes…',value:customInput,
+          onChange:e=>setCustomInput(e.target.value),
+          onKeyDown:e=>{
+            if(e.key==='Enter'){
+              setModeDuration(modeId,parseInt(customInput,10));
+              setCustomInput('');
+            }
+          },
+          style:{flex:1,padding:'9px 14px',fontSize:13}}),
+        h('button',{className:'btn-violet',onClick:()=>{
+          setModeDuration(modeId,parseInt(customInput,10));
+          setCustomInput('');
+        },style:{padding:'9px 16px',fontSize:13,borderRadius:12}},'Set')
+      )
     ),
     // Circle
     h('div',{style:{position:'relative',width:230,height:230,animation:'scaleIn .4s .08s ease both'}},
@@ -539,7 +694,7 @@ function Pomodoro({pomo,onDone}){
     // Controls
     h('div',{style:{display:'flex',gap:12,animation:'fadeUp .4s .12s ease both'}},
       h('button',{className:'btn-ghost',onClick:reset,style:{padding:'12px 18px',fontSize:18}},'↩'),
-      h('button',{className:'btn-violet',onClick:()=>setRun(r=>!r),style:{
+      h('button',{className:'btn-violet',onClick:toggleRun,style:{
         padding:'13px 44px',fontSize:16,borderRadius:16,minWidth:152,
         background:running?`linear-gradient(135deg,${RED},#c0392b)`:`linear-gradient(135deg,${mode.color},#7c5ce1)`
       }},running?'⏸  Pause':'▶  Start')

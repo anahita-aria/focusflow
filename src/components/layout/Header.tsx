@@ -10,9 +10,10 @@ export function Header() {
 
   return (
     <header
-      className="sticky top-0 z-20 mx-auto flex max-w-md items-center justify-between gap-2 px-4 pb-3"
-      style={{ paddingTop: 'calc(1rem + env(safe-area-inset-top))' }}
+      className="sticky top-0 z-20 border-b border-white/[0.06] bg-background/80 backdrop-blur-xl"
+      style={{ paddingTop: 'env(safe-area-inset-top)' }}
     >
+      <div className="mx-auto flex max-w-md items-center justify-between gap-2 px-4 pt-4 pb-3">
       <button
         type="button"
         onClick={() => navigate('settings')}
@@ -59,6 +60,7 @@ export function Header() {
         >
           <SettingsIcon className="size-4" />
         </button>
+      </div>
       </div>
     </header>
   )

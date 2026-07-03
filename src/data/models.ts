@@ -57,6 +57,17 @@ export interface Reward {
   cost: number // in coins
 }
 
+// A log entry written each time a task is completed, so the History view can
+// show a per-day journal even for recurring tasks (whose `done` flag resets).
+export interface Completion {
+  id: string
+  taskId: string
+  date: string // YYYY-MM-DD it was completed
+  text: string
+  priority: Priority
+  recurring: boolean
+}
+
 export type ThemeName = 'violet' | 'teal' | 'amber'
 
 export interface Profile {
@@ -87,6 +98,7 @@ export interface BackupData {
   habits: Habit[]
   sessions: PomodoroSession[]
   rewards: Reward[]
+  completions?: Completion[] // optional: absent in older backups
   gamification: GamificationState
   settings: Settings
 }

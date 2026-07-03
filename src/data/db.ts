@@ -4,6 +4,7 @@ import type {
   Habit,
   PomodoroSession,
   Reward,
+  Completion,
   GamificationState,
   Settings,
 } from './models'
@@ -25,6 +26,7 @@ class FocusFlowDB extends Dexie {
   habits!: Table<Habit, string>
   sessions!: Table<PomodoroSession, string>
   rewards!: Table<Reward, string>
+  completions!: Table<Completion, string>
   meta!: Table<MetaRow<GamificationState | Settings>, string>
 
   constructor() {
@@ -35,6 +37,10 @@ class FocusFlowDB extends Dexie {
       sessions: 'id, date, mode',
       rewards: 'id',
       meta: 'key',
+    })
+    // v2: per-task completion log for the History view.
+    this.version(2).stores({
+      completions: 'id, taskId, date',
     })
   }
 }

@@ -4,6 +4,7 @@ import {
   DEFAULT_GAMIFICATION,
   DEFAULT_SETTINGS,
   type BackupData,
+  type Completion,
   type FocusMode,
   type GamificationState,
   type Habit,
@@ -14,6 +15,7 @@ import {
   type Task,
 } from '@/data/models'
 import {
+  completionsRepo,
   exportAll,
   gamificationRepo,
   habitsRepo,
@@ -49,6 +51,7 @@ interface StoreState {
   habits: Habit[]
   sessions: PomodoroSession[]
   rewards: Reward[]
+  completions: Completion[]
   gamification: GamificationState
   settings: Settings
 
@@ -189,20 +192,22 @@ export const useStore = create<StoreState>((set, get) => {
     habits: [],
     sessions: [],
     rewards: [],
+    completions: [],
     gamification: { ...DEFAULT_GAMIFICATION },
     settings: { ...DEFAULT_SETTINGS },
 
     async init() {
-      const [tasks, habits, sessions, rewards, gamification, settings] =
+      const [tasks, habits, sessions, rewards, completions, gamification, settings] =
         await Promise.all([
           tasksRepo.all(),
           habitsRepo.all(),
           sessionsRepo.all(),
           rewardsRepo.all(),
+          completionsRepo.all(),
           gamificationRepo.get(),
           settingsRepo.get(),
         ])
-      set({ tasks, habits, sessions, rewards, gamification, settings })
+      set({ tasks, habits, sessions, rewards, completions, gamification, settings })
       await runDailyReset()
       set({ ready: true })
     },
@@ -233,16 +238,29 @@ export const useStore = create<StoreState>((set, get) => {
     async toggleTask(id) {
       const task = get().tasks.find((t) => t.id === id)
       if (!task) return
+      const t = today()
       const nowDone = !task.done
       const updated: Task = {
         ...task,
         done: nowDone,
-        completedOn: nowDone ? today() : null,
+        completedOn: nowDone ? t : null,
       }
       await tasksRepo.put(updated)
-      set({ tasks: get().tasks.map((t) => (t.id === id ? updated : t)) })
+      set({ tasks: get().tasks.map((x) => (x.id === id ? updated : x)) })
 
       if (nowDone) {
+        // Log the completion for the History view.
+        const completion: Completion = {
+          id: newId(),
+          taskId: task.id,
+          date: t,
+          text: updated.text,
+          priority: task.priority,
+          recurring: task.recurring,
+        }
+        await completionsRepo.add(completion)
+        set({ completions: [...get().completions, completion] })
+
         // Count lifetime completion + award XP.
         const g = get().gamification
         await persistGamification({
@@ -251,6 +269,14 @@ export const useStore = create<StoreState>((set, get) => {
         })
         celebrateBurst()
         await award(TASK_XP[task.priority])
+      } else {
+        // Un-checked today — drop today's history entry for this task.
+        await completionsRepo.removeForTaskOnDate(task.id, t)
+        set({
+          completions: get().completions.filter(
+            (c) => !(c.taskId === task.id && c.date === t),
+          ),
+        })
       }
     },
 
@@ -412,16 +438,17 @@ export const useStore = create<StoreState>((set, get) => {
 
     async importData(data) {
       await importAll(data)
-      const [tasks, habits, sessions, rewards, gamification, settings] =
+      const [tasks, habits, sessions, rewards, completions, gamification, settings] =
         await Promise.all([
           tasksRepo.all(),
           habitsRepo.all(),
           sessionsRepo.all(),
           rewardsRepo.all(),
+          completionsRepo.all(),
           gamificationRepo.get(),
           settingsRepo.get(),
         ])
-      set({ tasks, habits, sessions, rewards, gamification, settings })
+      set({ tasks, habits, sessions, rewards, completions, gamification, settings })
       toast.success('Data imported')
     },
   }

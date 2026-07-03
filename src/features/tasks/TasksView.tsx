@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   Check,
+  History,
   MoreVertical,
   Pencil,
   Plus,
@@ -16,6 +17,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useStore } from '@/store/useStore'
+import { useNav } from '@/store/useNav'
+import { today } from '@/lib/date'
 import type { Task } from '@/data/models'
 import { cn } from '@/lib/utils'
 import { TaskFormDialog } from './TaskFormDialog'
@@ -34,17 +37,22 @@ export function TasksView() {
   const tasks = useStore((s) => s.tasks)
   const toggleTask = useStore((s) => s.toggleTask)
   const deleteTask = useStore((s) => s.deleteTask)
+  const navigate = useNav((s) => s.navigate)
 
   const [filter, setFilter] = useState<TaskFilter>('all')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<Task | null>(null)
 
   const visible = useMemo(() => {
-    const filtered = tasks.filter((t) => {
+    const t = today()
+    const filtered = tasks.filter((task) => {
+      // Keep "today's board" tidy: hide one-time tasks finished on a previous
+      // day (they live in History). Everything open + done-today stays.
+      if (task.done && !task.recurring && task.completedOn !== t) return false
       if (filter === 'all') return true
-      if (filter === 'open') return !t.done
-      if (filter === 'done') return t.done
-      return t.priority === filter
+      if (filter === 'open') return !task.done
+      if (filter === 'done') return task.done
+      return task.priority === filter
     })
     // Sort by priority, then open-before-done.
     return filtered.sort((a, b) => {
@@ -66,9 +74,19 @@ export function TasksView() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="font-heading text-2xl font-semibold">Tasks</h1>
-        <Button size="sm" onClick={openAdd} className="cursor-pointer gap-1">
-          <Plus className="size-4" /> Add
-        </Button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => navigate('history')}
+            aria-label="History"
+            className="glass grid size-9 cursor-pointer place-items-center rounded-full text-muted-foreground"
+          >
+            <History className="size-4" />
+          </button>
+          <Button size="sm" onClick={openAdd} className="cursor-pointer gap-1">
+            <Plus className="size-4" /> Add
+          </Button>
+        </div>
       </div>
 
       <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 pb-1">

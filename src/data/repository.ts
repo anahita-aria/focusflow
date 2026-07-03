@@ -5,6 +5,7 @@ import {
   DEFAULT_GAMIFICATION,
   DEFAULT_SETTINGS,
   type BackupData,
+  type Completion,
   type GamificationState,
   type Habit,
   type PomodoroSession,
@@ -43,6 +44,16 @@ export const rewardsRepo = {
   remove: (id: string) => db.rewards.delete(id),
 }
 
+// ---- Task completions (history log) ----
+export const completionsRepo = {
+  all: () => db.completions.toArray(),
+  add: (c: Completion) => db.completions.put(c),
+  remove: (id: string) => db.completions.delete(id),
+  // Remove the completion recorded for a task on a given day (task un-checked).
+  removeForTaskOnDate: (taskId: string, date: string) =>
+    db.completions.where({ taskId, date }).delete(),
+}
+
 // ---- Gamification (singleton meta row) ----
 export const gamificationRepo = {
   async get(): Promise<GamificationState> {
@@ -72,12 +83,13 @@ export const settingsRepo = {
 
 // ---- Whole-database export / import ----
 export async function exportAll(exportedAt: string): Promise<BackupData> {
-  const [tasks, habits, sessions, rewards, gamification, settings] =
+  const [tasks, habits, sessions, rewards, completions, gamification, settings] =
     await Promise.all([
       tasksRepo.all(),
       habitsRepo.all(),
       sessionsRepo.all(),
       rewardsRepo.all(),
+      completionsRepo.all(),
       gamificationRepo.get(),
       settingsRepo.get(),
     ])
@@ -88,6 +100,7 @@ export async function exportAll(exportedAt: string): Promise<BackupData> {
     habits,
     sessions,
     rewards,
+    completions,
     gamification,
     settings,
   }
@@ -96,17 +109,14 @@ export async function exportAll(exportedAt: string): Promise<BackupData> {
 export async function importAll(data: BackupData): Promise<void> {
   await db.transaction(
     'rw',
-    db.tasks,
-    db.habits,
-    db.sessions,
-    db.rewards,
-    db.meta,
+    [db.tasks, db.habits, db.sessions, db.rewards, db.completions, db.meta],
     async () => {
       await Promise.all([
         db.tasks.clear(),
         db.habits.clear(),
         db.sessions.clear(),
         db.rewards.clear(),
+        db.completions.clear(),
         db.meta.clear(),
       ])
       await Promise.all([
@@ -114,6 +124,7 @@ export async function importAll(data: BackupData): Promise<void> {
         db.habits.bulkPut(data.habits ?? []),
         db.sessions.bulkPut(data.sessions ?? []),
         db.rewards.bulkPut(data.rewards ?? []),
+        db.completions.bulkPut(data.completions ?? []),
         gamificationRepo.set(data.gamification ?? { ...DEFAULT_GAMIFICATION }),
         settingsRepo.set(data.settings ?? { ...DEFAULT_SETTINGS }),
       ])

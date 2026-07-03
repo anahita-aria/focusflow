@@ -7,6 +7,7 @@ import { BottomNav } from '@/components/layout/BottomNav'
 import { useStore } from '@/store/useStore'
 import { useNav } from '@/store/useNav'
 import { useAuth } from '@/store/useAuth'
+import { useTimer } from '@/store/useTimer'
 import { applyTheme } from '@/lib/theme'
 import { DashboardView } from '@/features/dashboard/DashboardView'
 import { TasksView } from '@/features/tasks/TasksView'
@@ -14,6 +15,7 @@ import { HabitsView } from '@/features/habits/HabitsView'
 import { FocusView } from '@/features/focus/FocusView'
 import { RewardsView } from '@/features/gamification/RewardsView'
 import { SettingsView } from '@/features/settings/SettingsView'
+import { HistoryView } from '@/features/history/HistoryView'
 
 const VIEWS = {
   dashboard: DashboardView,
@@ -22,6 +24,7 @@ const VIEWS = {
   focus: FocusView,
   rewards: RewardsView,
   settings: SettingsView,
+  history: HistoryView,
 } as const
 
 function App() {
@@ -32,8 +35,12 @@ function App() {
   const view = useNav((s) => s.view)
 
   useEffect(() => {
-    // Local data first; cloud auth/sync layers on top (no-op if unconfigured).
-    void init().then(() => initAuth())
+    // Local data first; then restore any in-flight focus timer (it may have
+    // completed while the app was backgrounded), then cloud auth/sync.
+    void init().then(() => {
+      useTimer.getState().restore()
+      void initAuth()
+    })
   }, [init, initAuth])
 
   useEffect(() => {

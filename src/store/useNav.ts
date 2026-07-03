@@ -7,6 +7,7 @@ export type View =
   | 'focus'
   | 'rewards'
   | 'settings'
+  | 'history'
 
 interface NavState {
   view: View

@@ -11,6 +11,7 @@ import { THEMES } from '@/lib/theme'
 import { AVATARS, Avatar } from '@/lib/avatars'
 import { cn } from '@/lib/utils'
 import { CloudSync } from './CloudSync'
+import { PushToggle } from './PushToggle'
 
 const MODE_LABELS: Record<FocusMode, string> = {
   work: 'Focus',
@@ -238,6 +239,7 @@ export function SettingsView() {
             }
           />
         </div>
+        <PushToggle />
       </div>
 
       {/* Data */}

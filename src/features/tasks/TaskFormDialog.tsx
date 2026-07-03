@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+  Drawer,
+  DrawerContent,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+} from '@/components/ui/drawer'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
@@ -55,20 +55,20 @@ export function TaskFormDialog({ open, onOpenChange, task }: Props) {
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="glass-strong max-w-[92vw] sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="font-heading">
+    <Drawer open={open} onOpenChange={onOpenChange}>
+      <DrawerContent className="glass-strong">
+        <div className="mx-auto w-full max-w-md">
+        <DrawerHeader className="text-left">
+          <DrawerTitle className="font-heading text-lg">
             {task ? 'Edit task' : 'New task'}
-          </DialogTitle>
-        </DialogHeader>
+          </DrawerTitle>
+        </DrawerHeader>
 
-        <div className="space-y-4 py-2">
+        <div className="space-y-4 px-4 pb-2">
           <div className="space-y-2">
             <Label htmlFor="task-text">Task</Label>
             <Input
               id="task-text"
-              autoFocus
               placeholder="What needs doing?"
               value={text}
               onChange={(e) => setText(e.target.value)}
@@ -106,23 +106,27 @@ export function TaskFormDialog({ open, onOpenChange, task }: Props) {
           </div>
         </div>
 
-        <DialogFooter>
+        <DrawerFooter
+          className="flex-row gap-2"
+          style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
+        >
           <Button
             variant="ghost"
             onClick={() => onOpenChange(false)}
-            className="cursor-pointer"
+            className="flex-1 cursor-pointer"
           >
             Cancel
           </Button>
           <Button
             onClick={() => void submit()}
             disabled={!text.trim()}
-            className="cursor-pointer"
+            className="flex-1 cursor-pointer"
           >
             {task ? 'Save' : 'Add task'}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </DrawerFooter>
+        </div>
+      </DrawerContent>
+    </Drawer>
   )
 }

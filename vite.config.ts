@@ -16,7 +16,12 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg'],
+      includeAssets: ['favicon.svg', 'push-sw.js'],
+      // Pull our push/notificationclick handlers into the generated SW without
+      // switching off Workbox precaching/auto-update.
+      workbox: {
+        importScripts: ['push-sw.js'],
+      },
       manifest: {
         name: 'FocusFlow',
         short_name: 'FocusFlow',

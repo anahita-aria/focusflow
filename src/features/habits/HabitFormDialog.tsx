@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+  Drawer,
+  DrawerContent,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+} from '@/components/ui/drawer'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
@@ -56,18 +56,18 @@ export function HabitFormDialog({ open, onOpenChange }: Props) {
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="glass-strong max-w-[92vw] sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="font-heading">New habit</DialogTitle>
-        </DialogHeader>
+    <Drawer open={open} onOpenChange={onOpenChange}>
+      <DrawerContent className="glass-strong">
+        <div className="mx-auto w-full max-w-md overflow-y-auto">
+        <DrawerHeader className="text-left">
+          <DrawerTitle className="font-heading text-lg">New habit</DrawerTitle>
+        </DrawerHeader>
 
-        <div className="space-y-4 py-2">
+        <div className="space-y-4 px-4 pb-2">
           <div className="space-y-2">
             <Label htmlFor="habit-name">Name</Label>
             <Input
               id="habit-name"
-              autoFocus
               placeholder={negative ? 'e.g. No late-night snacks' : 'e.g. Drink water'}
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -187,23 +187,27 @@ export function HabitFormDialog({ open, onOpenChange }: Props) {
           </div>
         </div>
 
-        <DialogFooter>
+        <DrawerFooter
+          className="flex-row gap-2"
+          style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
+        >
           <Button
             variant="ghost"
             onClick={() => onOpenChange(false)}
-            className="cursor-pointer"
+            className="flex-1 cursor-pointer"
           >
             Cancel
           </Button>
           <Button
             onClick={() => void submit()}
             disabled={!name.trim()}
-            className="cursor-pointer"
+            className="flex-1 cursor-pointer"
           >
             Create habit
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </DrawerFooter>
+        </div>
+      </DrawerContent>
+    </Drawer>
   )
 }

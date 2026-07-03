@@ -2,7 +2,9 @@ import { create } from 'zustand'
 import { toast } from 'sonner'
 import type { FocusMode } from '@/data/models'
 import { useStore } from './useStore'
+import { useAuth } from './useAuth'
 import { playAlarm, primeAudio } from '@/lib/sound'
+import { cancelPush, isPushEnabled, schedulePush } from '@/data/push'
 
 // Timestamp-driven Pomodoro timer kept in a GLOBAL store (not inside the Focus
 // view), so it survives navigating between tabs. Its state is also PERSISTED to
@@ -59,6 +61,7 @@ interface TimerState {
   remaining: number // seconds
   endTime: number | null // epoch ms
   plannedMinutes: number // full length of the active session (for accurate recording)
+  scheduledPushId: string | null // server-scheduled background push, if any
   justCompleted: FocusMode | null
 
   setMode: (mode: FocusMode) => void
@@ -77,6 +80,7 @@ interface Snapshot {
   remaining: number
   endTime: number | null
   plannedMinutes: number
+  scheduledPushId: string | null
 }
 
 // A single module-level interval drives the countdown independent of any
@@ -95,10 +99,44 @@ export const useTimer = create<TimerState>((set, get) => {
       remaining: s.remaining,
       endTime: s.endTime,
       plannedMinutes: s.plannedMinutes,
+      scheduledPushId: s.scheduledPushId,
     }
     // Persist only meaningful transitions (not every tick — endTime is enough
     // to reconstruct a running countdown).
     localStorage.setItem(PERSIST_KEY, JSON.stringify(snap))
+  }
+
+  // Schedule a background push for a work session's end (fires even if the app
+  // is closed). No-op unless push is configured, the user is signed in, and
+  // they've enabled background alerts.
+  async function scheduleWorkPush(mode: FocusMode, endTime: number) {
+    if (mode !== 'work') return
+    const userId = useAuth.getState().user?.id
+    if (!userId) return
+    try {
+      if (!(await isPushEnabled())) return
+      const id = await schedulePush(
+        userId,
+        new Date(endTime),
+        'Focus session complete',
+        'Nice work — time for a break.',
+      )
+      if (id) {
+        set({ scheduledPushId: id })
+        persist()
+      }
+    } catch {
+      /* offline / not configured — silently skip */
+    }
+  }
+
+  // Cancel a pending background push (session ended/paused inside the app, so
+  // the server push would be redundant).
+  function cancelWorkPush() {
+    const id = get().scheduledPushId
+    if (!id) return
+    set({ scheduledPushId: null })
+    void cancelPush(id).catch(() => {})
   }
 
   function ensureInterval() {
@@ -117,6 +155,7 @@ export const useTimer = create<TimerState>((set, get) => {
   // discover on reopen that it already ended in the past).
   function finish(mode: FocusMode, minutes: number, silent: boolean) {
     clearIntervalIfIdle()
+    cancelWorkPush() // completed here — drop any redundant background push
     if (!silent && useStore.getState().settings.soundEnabled) playAlarm()
     notify(mode)
     if (mode === 'work') {
@@ -139,6 +178,7 @@ export const useTimer = create<TimerState>((set, get) => {
     remaining: durationFor('work'),
     endTime: null,
     plannedMinutes: useStore.getState().settings.durations.work,
+    scheduledPushId: null,
     justCompleted: null,
 
     tick() {
@@ -151,7 +191,8 @@ export const useTimer = create<TimerState>((set, get) => {
 
     start() {
       primeAudio()
-      const minutes = useStore.getState().settings.durations[get().mode]
+      const mode = get().mode
+      const minutes = useStore.getState().settings.durations[mode]
       const endTime = Date.now() + get().remaining * 1000
       set({
         running: true,
@@ -162,6 +203,7 @@ export const useTimer = create<TimerState>((set, get) => {
       })
       ensureInterval()
       persist()
+      void scheduleWorkPush(mode, endTime)
     },
 
     pause() {
@@ -171,6 +213,7 @@ export const useTimer = create<TimerState>((set, get) => {
           ? Math.max(0, Math.round((endTime - Date.now()) / 1000))
           : remaining
       clearIntervalIfIdle()
+      cancelWorkPush()
       set({ running: false, endTime: null, remaining: rem })
       persist()
       // `started` stays true — paused, not reset.
@@ -178,6 +221,7 @@ export const useTimer = create<TimerState>((set, get) => {
 
     reset() {
       clearIntervalIfIdle()
+      cancelWorkPush()
       set({
         running: false,
         started: false,
@@ -190,6 +234,7 @@ export const useTimer = create<TimerState>((set, get) => {
 
     setMode(mode) {
       clearIntervalIfIdle()
+      cancelWorkPush()
       set({
         mode,
         running: false,
@@ -219,7 +264,11 @@ export const useTimer = create<TimerState>((set, get) => {
       if (snap.running && snap.endTime != null) {
         if (Date.now() >= snap.endTime) {
           // Session finished while the app was away — record it now.
-          set({ mode: snap.mode, plannedMinutes: snap.plannedMinutes })
+          set({
+            mode: snap.mode,
+            plannedMinutes: snap.plannedMinutes,
+            scheduledPushId: snap.scheduledPushId ?? null,
+          })
           finish(snap.mode, snap.plannedMinutes, true)
           if (snap.mode === 'work') {
             toast.success('Focus session finished', {
@@ -234,6 +283,7 @@ export const useTimer = create<TimerState>((set, get) => {
             started: true,
             endTime: snap.endTime,
             plannedMinutes: snap.plannedMinutes,
+            scheduledPushId: snap.scheduledPushId ?? null,
             remaining: Math.max(
               0,
               Math.round((snap.endTime - Date.now()) / 1000),
@@ -251,6 +301,7 @@ export const useTimer = create<TimerState>((set, get) => {
           endTime: null,
           remaining: snap.remaining,
           plannedMinutes: snap.plannedMinutes,
+          scheduledPushId: snap.scheduledPushId ?? null,
         })
       } else {
         set({ mode: snap.mode })
